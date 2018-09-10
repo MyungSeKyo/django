@@ -1,5 +1,6 @@
-from django.db import transaction
+from django.db import connection, transaction
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from .models import Article, InheritedArticleA, InheritedArticleB, Publication
 
@@ -554,3 +555,13 @@ class ManyToManyTests(TestCase):
             ]
         )
         self.assertQuerysetEqual(b.publications.all(), ['<Publication: Science Weekly>'])
+
+    def test_count_query(self):
+        """
+        #29725 - Calling count() on a many to many relation should not generate inefficient sql
+        """
+        article = self.a1
+
+        with CaptureQueriesContext(connection) as captured_query:
+            article.publications.count()
+            self.assertNotIn('INNER JOIN', captured_query[0]['sql'])
