@@ -912,6 +912,18 @@ def create_forward_many_to_many_manager(superclass, rel, reverse):
                 False,
             )
 
+        def count(self):
+            # If the through's target field's foreign integrity is enforced
+            # the COUNT can be performed against the through table instead of
+            # INNER JOIN'ing the target table.
+            if self.target_field.db_constraint:
+                hints = {'instance': self.instance}
+                manager = self.through._base_manager.db_manager(using=self._db, hints=hints)
+                return manager.filter(
+                    **{self.source_field_name: self.instance.pk}
+                ).count()
+            return super().count()
+
         def add(self, *objs):
             if not rel.through._meta.auto_created:
                 opts = self.through._meta
