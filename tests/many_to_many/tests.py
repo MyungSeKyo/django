@@ -1,5 +1,5 @@
 from django.db import connection, transaction
-from django.test import TestCase
+from django.test import TestCase, skipUnlessDBFeature
 from django.test.utils import CaptureQueriesContext
 
 from .models import Article, InheritedArticleA, InheritedArticleB, Publication
@@ -556,12 +556,16 @@ class ManyToManyTests(TestCase):
         )
         self.assertQuerysetEqual(b.publications.all(), ['<Publication: Science Weekly>'])
 
+    @skipUnlessDBFeature('supports_foreign_keys')
     def test_count_query(self):
         """
-        #29725 - Calling count() on a many to many relation should not generate inefficient sql
+        #29725 - Calling count() and exists() on a many to many relation should not generate unnecessary JOIN
         """
         article = self.a1
 
         with CaptureQueriesContext(connection) as captured_query:
-            article.publications.count()
-            self.assertNotIn('INNER JOIN', captured_query[0]['sql'])
+            self.assertEqual(article.publications.count(), 1)
+            self.assertNotIn('JOIN', captured_query[0]['sql'])
+
+            self.assertEqual(article.publications.exists(), True)
+            self.assertNotIn('JOIN', captured_query[1]['sql'])
