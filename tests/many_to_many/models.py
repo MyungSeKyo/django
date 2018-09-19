@@ -55,3 +55,19 @@ class InheritedArticleA(AbstractArticle):
 
 class InheritedArticleB(AbstractArticle):
     pass
+
+
+class NullableTargetArticle(models.Model):
+    headline = models.CharField(max_length=100)
+    publications = models.ManyToManyField(Publication, through='NullablePublicationThrough')
+
+    def __str__(self):
+        return self.headline
+
+    class Meta:
+        ordering = ('headline',)
+
+
+class NullablePublicationThrough(models.Model):
+    article = models.ForeignKey(NullableTargetArticle, on_delete=models.CASCADE)
+    publication = models.ForeignKey(Publication, null=True, on_delete=models.CASCADE)

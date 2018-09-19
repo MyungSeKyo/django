@@ -2,7 +2,8 @@ from django.db import connection, transaction
 from django.test import TestCase, skipUnlessDBFeature
 from django.test.utils import CaptureQueriesContext
 
-from .models import Article, InheritedArticleA, InheritedArticleB, Publication
+from .models import Article, InheritedArticleA, InheritedArticleB, Publication, NullableTargetArticle, \
+    NullablePublicationThrough
 
 
 class ManyToManyTests(TestCase):
@@ -557,15 +558,26 @@ class ManyToManyTests(TestCase):
         self.assertQuerysetEqual(b.publications.all(), ['<Publication: Science Weekly>'])
 
     @skipUnlessDBFeature('supports_foreign_keys')
-    def test_count_query(self):
+    def test_count_and_exists_query(self):
         """
-        #29725 - Calling count() and exists() on a many to many relation should not generate unnecessary JOIN
+        #29725 - Calling count() and exists() on a many to many relation
+        should not generate sql including unnecessary JOIN.
         """
-        article = self.a1
+        article = NullableTargetArticle.objects.create(headline='Python is good')
+        NullablePublicationThrough.objects.create(article=article, publication=None)
+        NullablePublicationThrough.objects.create(article=article, publication=self.p1)
 
         with CaptureQueriesContext(connection) as captured_query:
-            self.assertEqual(article.publications.count(), 1)
+            self.assertEqual(self.a1.publications.count(), 1)
             self.assertNotIn('JOIN', captured_query[0]['sql'])
 
-            self.assertEqual(article.publications.exists(), True)
+            self.assertEqual(article.publications.count(), 1)
             self.assertNotIn('JOIN', captured_query[1]['sql'])
+            self.assertIn('"publication_id" IS NOT NULL', captured_query[1]['sql'])
+
+            self.assertEqual(self.a1.publications.exists(), True)
+            self.assertNotIn('JOIN', captured_query[2]['sql'])
+
+            self.assertTrue(article.publications.exists())
+            self.assertNotIn('JOIN', captured_query[3]['sql'])
+            self.assertIn('"publication_id" IS NOT NULL', captured_query[3]['sql'])

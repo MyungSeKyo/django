@@ -912,29 +912,38 @@ def create_forward_many_to_many_manager(superclass, rel, reverse):
                 False,
             )
 
-        def count(self):
+        @property
+        def constrained_target(self):
             # If the through's target field's foreign integrity is enforced
-            # the COUNT can be performed against the through table instead of
-            # INNER JOIN'ing the target table.
-            if self.target_field.db_constraint:
-                hints = {'instance': self.instance}
-                manager = self.through._base_manager.db_manager(using=self._db, hints=hints)
-                return manager.filter(
-                    **{self.source_field_name: self.instance.pk}
-                ).count()
-            return super().count()
+            # the query can be performed solely against the through table as
+            # the INNER JOIN'ing against target table becomes unnecessary.
+            if not self.target_field.db_constraint:
+                return None
+            db = router.db_for_read(self.through, instance=self.instance)
+            if not connections[db].features.supports_foreign_keys:
+                return None
+            hints = {'instance': self.instance}
+            manager = self.through._base_manager.db_manager(db, hints=hints)
+            filters = {
+                self.source_field_name: self.instance.pk,
+            }
+            # Nullable target rows must be excluded as well as they would
+            # have been filtered out from an INNER JOIN.
+            if self.target_field.null:
+                filters['%s__isnull' % self.target_field_name] = False
+            return manager.filter(**filters)
 
         def exists(self):
-            # If the through's target field's foreign integrity is enforced
-            # the EXISTS can be performed against the through table instead of
-            # INNER JOIN'ing the target table.
-            if self.target_field.db_constraint and not self.target_field.null:
-                hints = {'instance': self.instance}
-                manager = self.through._base_manager.db_manager(using=self._db, hints=hints)
-                return manager.filter(
-                    **{self.source_field_name: self.instance.pk}
-                ).exists()
+            constrained_target = self.constrained_target
+            if constrained_target:
+                return constrained_target.exists()
             return super().exists()
+
+        def count(self):
+            constrained_target = self.constrained_target
+            if constrained_target:
+                return constrained_target.count()
+            return super().count()
 
         def add(self, *objs):
             if not rel.through._meta.auto_created:
