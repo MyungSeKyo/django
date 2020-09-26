@@ -123,6 +123,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         'FilePathField': 'NVARCHAR2(%(max_length)s)',
         'FloatField': 'DOUBLE PRECISION',
         'IntegerField': 'NUMBER(11)',
+        'JSONField': 'NCLOB',
         'BigIntegerField': 'NUMBER(19)',
         'IPAddressField': 'VARCHAR2(15)',
         'GenericIPAddressField': 'VARCHAR2(39)',
@@ -141,6 +142,7 @@ class DatabaseWrapper(BaseDatabaseWrapper):
     }
     data_type_check_constraints = {
         'BooleanField': '%(qn_column)s IN (0,1)',
+        'JSONField': '%(qn_column)s IS JSON',
         'NullBooleanField': '%(qn_column)s IN (0,1)',
         'PositiveBigIntegerField': '%(qn_column)s >= 0',
         'PositiveIntegerField': '%(qn_column)s >= 0',
@@ -320,6 +322,10 @@ class DatabaseWrapper(BaseDatabaseWrapper):
             return False
         else:
             return True
+
+    @cached_property
+    def cx_oracle_version(self):
+        return tuple(int(x) for x in Database.version.split('.'))
 
     @cached_property
     def oracle_version(self):
